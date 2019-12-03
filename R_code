@@ -1,0 +1,254 @@
+b<-dbGetQuery(conn,"SELECT ACCESSION, coalesce(DETAILS, 'NA') AS DTLS, coalesce(STATUS,'na') AS STA, X_DATE, X_TIME FROM CPL.AUDIT_X WHERE X_DATETIME>'11/1/2019' AND X_DATETIME<'11/6/2019' AND STATUS IN (1,5,13)")
+
+b1<-b
+
+b1$NODES<-sub("~.*","", b$DTLS)
+
+b1$DATETIME<-paste0(b1$X_DATE," ", b1$X_TIME)
+
+b1$DATETIME<-as.POSIXct(b1$DATETIME, format= "%Y-%m-%d %H:%M:%S")
+
+b1$DATETIME<-round_date(b1$DATETIME, unit = "hour")
+
+b1<-unique(b1)
+
+B1<-aggregate(ACCESSION~STA+NODES+DATETIME, data = b1, FUN=length)
+
+worklist<-c("COBAS7S", "COBAS7S2","COBAS7U","COBAS5S","COBASIA", "COBAS8LV","LIAISON","ARCTECT","CPL CBC","CPL UA","A1C","COAG1","RPR", "Automate3", "Automate5" ,"Automate6","BIM1", "BIM2", "BIM3","MUT2","P612-1", "P612-2","P612-3","P612-4", "P612-5","P612-6", "P612-7")
+
+B2<-filter(B1, NODES %in% worklist)
+
+B2$STA[B2$STA=="5"]<-"WL_BUILD"
+
+B2$STA[B2$STA=="13"]<-"WL_RELEASE"
+
+B2$STA[B2$STA=="1"]<-"AUTOMATION_RCVD"
+
+B2<-spread(B2, key = "STA", value = "ACCESSION")
+
+
+
+
+
+
+library(shiny)
+
+library(shinydashboard)
+
+library(plotly)
+
+library(RODBC)
+
+library(tidyverse)
+
+library(lubridate)
+
+################
+
+# ui
+
+################
+
+ui <- fluidPage(
+
+  plotlyOutput("plot"),
+
+  verbatimTextOutput("event")
+
+)
+
+ 
+
+################
+
+# Server
+
+################
+
+server <- function(input, output, session) {
+
+  load(file = "/mnt/data/shinyAppsData/ltsang/B2.dat")
+
+    margin <- list(
+
+    l = 150,
+
+    r = 50,
+
+    b = 100,
+
+    t = 100,
+
+    pad = 4
+
+  )
+
+  output$plot <- renderPlotly({
+
+    plot_ly(B2, x = ~DATETIME, y = ~WL_BUILD, name = ~NODES, type = 'scatter', mode = 'lines', width = 1700, height = 1000,
+
+      line = list(color = ~NODES, width = 4)) %>%
+
+      add_trace(y = ~WL_RELEASE, name = ~NODES, line = list(color = ~NODES, width = 4, dash = 'dash')) %>%
+
+      add_trace(y = ~AUTOMATION_RCVD, name = ~NODES, line = list(color = ~NODES, width = 4, dash = 'dot')) %>%
+
+      layout(autosize = F, title = "CLINICAL PATHOLOGY LABORATORY NIGHT PRODUCTION", margin=margin,
+
+             xaxis = list(title = "TIME, DATE", tickformat = "%H - %m/%d/%Y (%a)", ticks= "inside", dtick=3600000, rangeslider = list(type = "date"),
+
+             rangeselector = list(
+
+                buttons = list(
+
+                  list(
+
+                    count = 2,
+
+                    label = "1 Day",
+
+                    step = "day",
+
+                    stepmode = "backward"),
+
+                  list(
+
+                    count = 3,
+
+                    label = "2 Days",
+
+                    step = "day",
+
+                    stepmode = "backward"),
+
+                  list(
+
+                    count = 4,
+
+                    label = "3 Days",
+
+                    step = "day",
+
+                    stepmode = "backward"),
+
+                  list(step = "all", label = "all")
+
+                )
+
+            )),
+
+            yaxis = list(title = "ACCESSION COUNT"),
+
+            updatemenus = list(
+
+              list(
+
+                x = -0.1,
+
+                y = 0.5,
+
+                active = -1,
+
+                type = "buttons",
+
+                label = "Category",
+
+                buttons = list(
+
+                  list(
+
+                    args = c("visible", c(TRUE, TRUE, TRUE)),
+
+                    label = "View all",
+
+                    method = "restyle"
+
+                  ),
+
+                  list(
+
+                    args = c("visible", c(FALSE, FALSE, FALSE)),
+
+                    label = "Hide all",
+
+                    method = "restyle"
+
+                  )
+
+                )
+
+              ),
+
+              list(
+
+                x = -0.1,
+
+                y = 0.8,
+
+                active = -1,
+
+                type = "buttons",
+
+                label = "Category",
+
+                buttons = list(
+
+                  list(
+
+                    args = c("visible", c(TRUE, FALSE, FALSE)),
+
+                    label = "WL_BUILD",
+
+                    method = "restyle"
+
+                  ),
+
+                  list(
+
+                    args = c("visible", c(FALSE, TRUE, FALSE)),
+
+                    label = "WL_RELEASE",
+
+                    method = "restyle"
+
+                  ),
+
+                  list(
+
+                    args = c("visible", c(FALSE, FALSE, TRUE)),
+
+                    label = "AUTOMATION_RCVD",
+
+                    method = "restyle"
+
+                  )
+
+                )
+
+              )
+
+            )
+
+      #event_register("plotly_restyle")
+
+      )}
+
+)
+
+  #output$event <- renderPrint({
+
+   # d <- event_data("plotly_restyle")
+
+    #if (is.null(d)) "Select Buttons to Filter Data" else d
+
+  #})
+
+ 
+
+  }
+
+
+
+shinyApp(ui, server, enableBookmarking = "url")
+
+ 
